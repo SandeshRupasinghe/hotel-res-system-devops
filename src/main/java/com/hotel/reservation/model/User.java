@@ -6,9 +6,8 @@ public class User {
     private String name;
     private String email;
     private String password;
-    private String role; // admin or customer
+    private String role;
 
-    // Constructor
     public User(String userId, String name, String email, String password, String role) {
         this.userId = userId;
         this.name = name;
@@ -17,11 +16,9 @@ public class User {
         this.role = role;
     }
 
-    // Default constructor
     public User() {
     }
 
-    // Getters and Setters
     public String getUserId() {
         return userId;
     }
@@ -60,11 +57,5 @@ public class User {
 
     public void setRole(String role) {
         this.role = role;
-    }
-
-
-    @Override
-    public String toString() {
-        return userId + "," + name + "," + email + "," + password + "," + role;
     }
 }

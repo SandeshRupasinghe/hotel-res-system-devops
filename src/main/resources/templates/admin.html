@@ -15,6 +15,12 @@
 
     <div class="max-w-7xl mx-auto px-6 pb-16">
 
+        <div th:if="${error}"
+             class="bg-red-500 bg-opacity-70 text-white p-3 rounded mb-4"
+             style="font-family: 'Georgia', serif;">
+            <span th:text="${error}"></span>
+        </div>
+
         <!-- USERS TABLE -->
         <div class="bg-white bg-opacity-10 backdrop-blur-md border border-white border-opacity-20 p-6 rounded-xl shadow-lg mb-10">
             <h3 class="text-xl font-semibold mb-4 text-white" style="font-family: 'Georgia', serif;">Users</h3>
@@ -147,7 +153,9 @@
                     <th class="p-3">Booking ID</th>
                     <th class="p-3">User ID</th>
                     <th class="p-3">Room ID</th>
-                    <th class="p-3">Date</th>
+                    <th class="p-3">Check In</th>
+                    <th class="p-3">Check Out</th>
+                    <th class="p-3">Status</th>
                 </tr>
                 </thead>
                 <tbody>
@@ -156,7 +164,9 @@
                     <td class="p-3" th:text="${booking.bookingId}"></td>
                     <td class="p-3" th:text="${booking.userId}"></td>
                     <td class="p-3" th:text="${booking.roomId}"></td>
-                    <td class="p-3" th:text="${booking.date}"></td>
+                    <td class="p-3" th:text="${booking.checkInDate}"></td>
+                    <td class="p-3" th:text="${booking.checkOutDate}"></td>
+                    <td class="p-3" th:text="${booking.status}"></td>
                 </tr>
                 </tbody>
             </table>

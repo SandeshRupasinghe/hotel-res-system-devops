@@ -10,7 +10,11 @@ import org.springframework.web.bind.annotation.*;
 @Controller
 public class UserController {
 
-    private UserService userService = new UserService();
+    private final UserService userService;
+
+    public UserController(UserService userService) {
+        this.userService = userService;
+    }
 
     @GetMapping("/login")
     public String loginPage() {
@@ -28,10 +32,10 @@ public class UserController {
         if (user != null) {
             session.setAttribute("user", user);
             return "redirect:/";
-        } else {
-            model.addAttribute("error", "Invalid email or password");
-            return "login";
         }
+
+        model.addAttribute("error", "Invalid email or password");
+        return "login";
     }
 
     @GetMapping("/register")
@@ -41,17 +45,16 @@ public class UserController {
 
     @PostMapping("/register")
     public String registerUser(@ModelAttribute User user, Model model) {
-        user.setRole("Guest");
+        user.setRole("Customer");
         boolean success = userService.registerUser(user);
+
         if (success) {
             return "redirect:/login";
-        } else {
-            model.addAttribute("error", "User already exists");
-            return "register";
         }
+
+        model.addAttribute("error", "User ID or email already exists");
+        return "register";
     }
-
-
 
     @GetMapping("/logout")
     public String logout(HttpSession session) {

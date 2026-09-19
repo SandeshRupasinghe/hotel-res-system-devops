@@ -1,99 +1,128 @@
 package com.hotel.reservation.service;
 
 import com.hotel.reservation.model.Room;
-import com.hotel.reservation.util.FileHandler;
-import java.util.ArrayList;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
+import java.util.ArrayList;
+import java.util.List;
+
+@Service
 public class RoomService {
 
-    private final String FILE_NAME = "data/rooms.txt";
+    private final JdbcTemplate jdbcTemplate;
 
-    // Add room
-    public void addRoom(Room room) {
-        String data = room.getRoomId() + "," +
-                room.getType() + "," +
-                room.getPrice() + "," +
-                room.isAvailable();
-
-        FileHandler.writeToFile(FILE_NAME, data);
+    public RoomService(JdbcTemplate jdbcTemplate) {
+        this.jdbcTemplate = jdbcTemplate;
     }
 
-    // Get all rooms
+    @Transactional
+    public boolean addRoom(Room room) {
+        if (room == null || room.getRoomId() == null || room.getRoomId().isBlank()
+                || room.getType() == null || room.getType().isBlank() || room.getPrice() <= 0) {
+            return false;
+        }
+
+        int hotelId = room.getHotelId() <= 0 ? 1 : room.getHotelId();
+        int capacity = room.getCapacity() <= 0 ? 1 : room.getCapacity();
+
+        try {
+            int rows = jdbcTemplate.update(
+                    "INSERT INTO room (room_id, type, price, capacity, facilities, availability_status, hotel_id) " +
+                            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                    room.getRoomId(),
+                    room.getType(),
+                    room.getPrice(),
+                    capacity,
+                    room.getFacilities(),
+                    room.isAvailable() ? "Available" : "Unavailable",
+                    hotelId
+            );
+            return rows == 1;
+        } catch (DataIntegrityViolationException ex) {
+            return false;
+        }
+    }
+
     public ArrayList<Room> getRooms() {
-        ArrayList<String> lines = FileHandler.readFromFile(FILE_NAME);
-        ArrayList<Room> rooms = new ArrayList<>();
-
-        for (String line : lines) {
-
-            if (line.trim().isEmpty()) continue;
-
-            String[] data = line.split(",");
-
-            if (data.length >= 4) {
-                Room room = new Room(
-                        data[0],
-                        data[1],
-                        Double.parseDouble(data[2]),
-                        Boolean.parseBoolean(data[3])
-                );
-                rooms.add(room);
-            }
-        }
-
-        return rooms;
-    }
-
-    // Update room
-    public void updateRoom(String roomId, Room updatedRoom) {
-        ArrayList<String> lines = FileHandler.readFromFile(FILE_NAME);
-        ArrayList<String> updatedLines = new ArrayList<>();
-
-        for (String line : lines) {
-            if (line.trim().isEmpty()) continue;
-
-            String[] data = line.split(",");
-
-            if (data[0].equals(roomId)) {
-                String updatedData =
-                        updatedRoom.getRoomId() + "," +
-                                updatedRoom.getType() + "," +
-                                updatedRoom.getPrice() + "," +
-                                updatedRoom.isAvailable();
-                updatedLines.add(updatedData);
-            } else {
-                updatedLines.add(line);
-            }
-        }
-
-        FileHandler.overwriteFile(FILE_NAME, updatedLines);
-    }
-
-    // Delete room
-    public void deleteRoom(String roomId) {
-        ArrayList<String> lines = FileHandler.readFromFile(FILE_NAME);
-        ArrayList<String> updatedLines = new ArrayList<>();
-
-        for (String line : lines) {
-            if (line.trim().isEmpty()) continue;
-
-            String[] data = line.split(",");
-
-            if (!data[0].equals(roomId)) {
-                updatedLines.add(line);
-            }
-        }
-
-        FileHandler.overwriteFile(FILE_NAME, updatedLines);
+        return new ArrayList<>(queryRooms(
+                "SELECT room_id, type, price, capacity, facilities, availability_status, hotel_id FROM room ORDER BY room_id"
+        ));
     }
 
     public ArrayList<Room> getAvailableRooms() {
-        ArrayList<Room> all = getRooms();
-        ArrayList<Room> available = new ArrayList<>();
-        for (Room room : all) {
-            if (room.isAvailable()) {
-                available.add(room);
-            }
+        return new ArrayList<>(queryRooms(
+                "SELECT room_id, type, price, capacity, facilities, availability_status, hotel_id " +
+                        "FROM room WHERE availability_status = 'Available' ORDER BY room_id"
+        ));
+    }
+
+    public Room getRoom(String roomId) {
+        if (roomId == null || roomId.isBlank()) {
+            return null;
         }
-        return available;
+
+        List<Room> rooms = jdbcTemplate.query(
+                "SELECT room_id, type, price, capacity, facilities, availability_status, hotel_id " +
+                        "FROM room WHERE room_id = ?",
+                this::mapRoom,
+                roomId
+        );
+        return rooms.isEmpty() ? null : rooms.get(0);
+    }
+
+    @Transactional
+    public boolean updateRoomDetails(String roomId, double price, boolean available) {
+        if (roomId == null || roomId.isBlank() || price <= 0) {
+            return false;
+        }
+
+        int rows = jdbcTemplate.update(
+                "UPDATE room SET price = ?, availability_status = ? WHERE room_id = ?",
+                price,
+                available ? "Available" : "Unavailable",
+                roomId
+        );
+        return rows > 0;
+    }
+
+    @Transactional
+    public boolean deleteRoom(String roomId) {
+        if (roomId == null || roomId.isBlank()) {
+            return false;
+        }
+
+        Integer bookingLinks = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM booking_room WHERE room_id = ?",
+                Integer.class,
+                roomId
+        );
+        if (bookingLinks != null && bookingLinks > 0) {
+            return false;
+        }
+
+        try {
+            return jdbcTemplate.update("DELETE FROM room WHERE room_id = ?", roomId) > 0;
+        } catch (DataIntegrityViolationException ex) {
+            return false;
+        }
+    }
+
+    private List<Room> queryRooms(String sql) {
+        return jdbcTemplate.query(sql, this::mapRoom);
+    }
+
+    private Room mapRoom(java.sql.ResultSet rs, int rowNum) throws java.sql.SQLException {
+        return new Room(
+                rs.getString("room_id"),
+                rs.getString("type"),
+                rs.getDouble("price"),
+                "Available".equalsIgnoreCase(rs.getString("availability_status")),
+                rs.getInt("capacity"),
+                rs.getString("facilities"),
+                rs.getInt("hotel_id")
+        );
     }
 }

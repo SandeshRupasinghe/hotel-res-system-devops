@@ -1,131 +1,197 @@
 package com.hotel.reservation.service;
 
 import com.hotel.reservation.model.Booking;
-import com.hotel.reservation.util.FileHandler;
 import com.hotel.reservation.model.Room;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDate;
+import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
+import java.util.List;
 
+@Service
 public class BookingService {
 
-    private RoomService roomService = new RoomService();
-    private UserService userService = new UserService();
+    private final JdbcTemplate jdbcTemplate;
+    private final RoomService roomService;
 
-
-    public void createBooking(Booking booking) {
-
-        boolean roomAvailable = false;
-        System.out.println("Requested Room: " + booking.getRoomId());
-
-        for (var room : roomService.getRooms()) {
-
-            System.out.println(
-                    "RoomID=" + room.getRoomId()
-                            + " Available=" + room.isAvailable()
-            );
-
-            if (room.getRoomId().equals(booking.getRoomId())
-                    && room.isAvailable()) {
-
-                roomAvailable = true;
-                break;
-            }
-        }
-
-        if (!roomAvailable) {
-            System.out.println("Booking failed: Room not available.");
-            return;
-        }
-
-        String data = booking.getBookingId() + "," +
-                booking.getUserId() + "," +
-                booking.getRoomId() + "," +
-                booking.getDate() + "," +
-                booking.getStatus();
-
-        FileHandler.writeToFile("data/bookings.txt", data);
-
-        // Mark room as unavailable
-        for (var room : roomService.getRooms()) {
-            if (room.getRoomId().equals(booking.getRoomId())) {
-                room.setAvailable(false);
-                roomService.updateRoom(room.getRoomId(), room);
-                break;
-            }
-        }
-
-        System.out.println("Booking created successfully!");
+    public BookingService(JdbcTemplate jdbcTemplate, RoomService roomService) {
+        this.jdbcTemplate = jdbcTemplate;
+        this.roomService = roomService;
     }
 
+    @Transactional
+    public boolean createBooking(Booking booking) {
+        if (booking == null
+                || isBlank(booking.getBookingId())
+                || isBlank(booking.getUserId())
+                || isBlank(booking.getRoomId())
+                || isBlank(booking.getCheckInDate())
+                || isBlank(booking.getCheckOutDate())) {
+            return false;
+        }
+
+        Room room = roomService.getRoom(booking.getRoomId());
+        if (room == null || !room.isAvailable()) {
+            return false;
+        }
+
+        final LocalDate checkIn;
+        final LocalDate checkOut;
+        try {
+            checkIn = LocalDate.parse(booking.getCheckInDate());
+            checkOut = LocalDate.parse(booking.getCheckOutDate());
+        } catch (DateTimeParseException ex) {
+            return false;
+        }
+
+        if (!checkIn.isBefore(checkOut)) {
+            return false;
+        }
+
+        Integer duplicateId = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM booking WHERE booking_id = ?",
+                Integer.class,
+                booking.getBookingId()
+        );
+        if (duplicateId != null && duplicateId > 0) {
+            return false;
+        }
+
+        Integer overlap = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM booking b " +
+                        "JOIN booking_room br ON b.booking_id = br.booking_id " +
+                        "WHERE br.room_id = ? AND b.status <> 'Cancelled' " +
+                        "AND b.check_in_date < ? AND b.check_out_date > ?",
+                Integer.class,
+                booking.getRoomId(),
+                booking.getCheckOutDate(),
+                booking.getCheckInDate()
+        );
+        if (overlap != null && overlap > 0) {
+            return false;
+        }
+
+        booking.setStatus("Confirmed");
+        booking.setBookingDate(LocalDate.now().toString());
+
+        jdbcTemplate.update(
+                "INSERT INTO booking (booking_id, check_in_date, check_out_date, status, booking_date, user_id) " +
+                        "VALUES (?, ?, ?, ?, ?, ?)",
+                booking.getBookingId(),
+                booking.getCheckInDate(),
+                booking.getCheckOutDate(),
+                booking.getStatus(),
+                booking.getBookingDate(),
+                booking.getUserId()
+        );
+
+        jdbcTemplate.update(
+                "INSERT INTO booking_room (booking_id, room_id) VALUES (?, ?)",
+                booking.getBookingId(),
+                booking.getRoomId()
+        );
+        return true;
+    }
 
     public ArrayList<Booking> getBookings() {
-
-        ArrayList<Booking> bookingList = new ArrayList<>();
-        ArrayList<String> lines = FileHandler.readFromFile("data/bookings.txt");
-
-        for (String line : lines) {
-            if (line.trim().isEmpty()) continue;
-
-            String[] data = line.split(",");
-
-            if (data.length >= 5) {
-                Booking booking = new Booking(
-                        data[0],
-                        data[1],
-                        data[2],
-                        data[3],
-                        data[4]
-                );
-                bookingList.add(booking);
-            }
-        }
-
-        return bookingList;
+        return new ArrayList<>(queryBookings(
+                "SELECT b.booking_id, b.user_id, br.room_id, b.check_in_date, b.check_out_date, " +
+                        "b.status, b.booking_date " +
+                        "FROM booking b JOIN booking_room br ON b.booking_id = br.booking_id " +
+                        "ORDER BY b.booking_date DESC, b.booking_id"
+        ));
     }
-
-
-    public void cancelBooking(String bookingId) {
-        ArrayList<String> lines = FileHandler.readFromFile("data/bookings.txt");
-        ArrayList<String> updatedLines = new ArrayList<>();
-        String cancelledRoomId = null;
-
-        for (String line : lines) {
-            if (line.trim().isEmpty()) continue;
-            String[] data = line.split(",");
-            if (data[0].equals(bookingId)) {
-                cancelledRoomId = data[2]; // grab the roomId before removing
-            } else {
-                updatedLines.add(line);
-            }
-        }
-
-        FileHandler.overwriteFile("data/bookings.txt", updatedLines);
-
-        // Set the room back to available
-        if (cancelledRoomId != null) {
-            for (Room room : roomService.getRooms()) {
-                if (room.getRoomId().equals(cancelledRoomId)) {
-                    room.setAvailable(true);
-                    roomService.updateRoom(room.getRoomId(), room);
-                    break;
-                }
-            }
-        }
-    }
-
 
     public ArrayList<Booking> getBookingsByUser(String userId) {
-
-        ArrayList<Booking> allBookings = getBookings();
-        ArrayList<Booking> userBookings = new ArrayList<>();
-
-        for (Booking booking : allBookings) {
-            if (booking.getUserId().equals(userId)) {
-                userBookings.add(booking);
-            }
+        if (isBlank(userId)) {
+            return new ArrayList<>();
         }
 
-        return userBookings;
+        return new ArrayList<>(jdbcTemplate.query(
+                "SELECT b.booking_id, b.user_id, br.room_id, b.check_in_date, b.check_out_date, " +
+                        "b.status, b.booking_date " +
+                        "FROM booking b JOIN booking_room br ON b.booking_id = br.booking_id " +
+                        "WHERE b.user_id = ? ORDER BY b.booking_date DESC, b.booking_id",
+                this::mapBooking,
+                userId
+        ));
+    }
+
+    @Transactional
+    public boolean cancelBooking(String bookingId, String requesterUserId, boolean admin) {
+        if (isBlank(bookingId) || isBlank(requesterUserId)) {
+            return false;
+        }
+
+        List<Booking> matches = jdbcTemplate.query(
+                "SELECT b.booking_id, b.user_id, br.room_id, b.check_in_date, b.check_out_date, " +
+                        "b.status, b.booking_date " +
+                        "FROM booking b JOIN booking_room br ON b.booking_id = br.booking_id " +
+                        "WHERE b.booking_id = ?",
+                this::mapBooking,
+                bookingId
+        );
+
+        if (matches.isEmpty()) {
+            return false;
+        }
+
+        Booking booking = matches.get(0);
+        if (!admin && !requesterUserId.equals(booking.getUserId())) {
+            return false;
+        }
+        if ("Cancelled".equalsIgnoreCase(booking.getStatus())) {
+            return true;
+        }
+
+        int rows = jdbcTemplate.update(
+                "UPDATE booking SET status = 'Cancelled' WHERE booking_id = ?",
+                bookingId
+        );
+        if (rows == 0) {
+            return false;
+        }
+
+        Integer otherActiveBookings = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM booking b " +
+                        "JOIN booking_room br ON b.booking_id = br.booking_id " +
+                        "WHERE br.room_id = ? AND b.booking_id <> ? AND b.status <> 'Cancelled'",
+                Integer.class,
+                booking.getRoomId(),
+                bookingId
+        );
+
+        if (otherActiveBookings == null || otherActiveBookings == 0) {
+            jdbcTemplate.update(
+                    "UPDATE room SET availability_status = 'Available' " +
+                            "WHERE room_id = ? AND availability_status = 'Booked'",
+                    booking.getRoomId()
+            );
+        }
+
+        return true;
+    }
+
+    private List<Booking> queryBookings(String sql) {
+        return jdbcTemplate.query(sql, this::mapBooking);
+    }
+
+    private Booking mapBooking(java.sql.ResultSet rs, int rowNum) throws java.sql.SQLException {
+        return new Booking(
+                rs.getString("booking_id"),
+                rs.getString("user_id"),
+                rs.getString("room_id"),
+                rs.getDate("check_in_date").toLocalDate().toString(),
+                rs.getDate("check_out_date").toLocalDate().toString(),
+                rs.getString("status"),
+                rs.getDate("booking_date").toLocalDate().toString()
+        );
+    }
+
+    private boolean isBlank(String value) {
+        return value == null || value.isBlank();
     }
 }
-

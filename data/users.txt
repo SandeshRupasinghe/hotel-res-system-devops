@@ -1,2 +1,0 @@
-admin,admin,admintest@gmail.com,admin,Admin
-testID,testName,test@gmail.com,test,Guest

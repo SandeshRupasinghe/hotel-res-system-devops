@@ -1,101 +1,121 @@
 package com.hotel.reservation.service;
 
 import com.hotel.reservation.model.User;
-import com.hotel.reservation.util.FileHandler;
-import java.util.ArrayList;
+import org.springframework.dao.DuplicateKeyException;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
 import java.util.List;
 
+@Service
 public class UserService {
 
-    private final String USER_FILE = "data/users.txt";
+    private final JdbcTemplate jdbcTemplate;
 
-    // CRUD: CREATE
+    public UserService(JdbcTemplate jdbcTemplate) {
+        this.jdbcTemplate = jdbcTemplate;
+    }
+
+    @Transactional
     public boolean registerUser(User newUser) {
-        ArrayList<String> lines = FileHandler.readFromFile(USER_FILE);
+        Integer existing = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM app_user WHERE LOWER(email) = LOWER(?) OR user_id = ?",
+                Integer.class,
+                newUser.getEmail(),
+                newUser.getUserId()
+        );
 
-        for (String line : lines) {
-            if (line.trim().isEmpty()) continue;
-
-            String[] data = line.split(",");
-
-            // Check if email already exists
-            if (data.length >= 3 && data[2].equalsIgnoreCase(newUser.getEmail())) {
-                System.out.println("Registration failed: Email already registered.");
-                return false;
-            }
+        if (existing != null && existing > 0) {
+            return false;
         }
 
-        // Save user (IMPORTANT: requires toString() in User.java)
-        FileHandler.writeToFile(USER_FILE, newUser.toString());
-        System.out.println("User registered successfully!");
-        return true;
-    }
+        String role = normalizeRole(newUser.getRole());
+        newUser.setRole(role);
 
-    // CRUD: READ (LOGIN)
-    public User loginUser(String email, String password) {
-        ArrayList<String> lines = FileHandler.readFromFile(USER_FILE);
+        try {
+            jdbcTemplate.update(
+                    "INSERT INTO app_user (user_id, name, email, password, role) VALUES (?, ?, ?, ?, ?)",
+                    newUser.getUserId(),
+                    newUser.getName(),
+                    newUser.getEmail(),
+                    newUser.getPassword(),
+                    role
+            );
 
-        for (String line : lines) {
-            if (line.trim().isEmpty()) continue;
-
-            String[] data = line.split(",");
-
-            if (data.length >= 5) {
-                // Match email and password
-                if (data[2].equalsIgnoreCase(email) && data[3].equals(password)) {
-                    System.out.println("Login successful! Welcome, " + data[1]);
-                    return new User(data[0], data[1], data[2], data[3], data[4]);
-                }
-            }
-        }
-
-        System.out.println("Login failed: Invalid credentials.");
-        return null;
-    }
-
-    // CRUD: READ ALL
-    public List<User> getUsers() {
-        List<User> userList = new ArrayList<>();
-        ArrayList<String> lines = FileHandler.readFromFile(USER_FILE);
-
-        for (String line : lines) {
-            if (line.trim().isEmpty()) continue;
-
-            String[] data = line.split(",");
-
-            if (data.length >= 5) {
-                userList.add(new User(data[0], data[1], data[2], data[3], data[4]));
-            }
-        }
-
-        return userList;
-    }
-
-    // CRUD: UPDATE
-    public boolean updateUserProfile(String userId, User updatedUserDetails) {
-        ArrayList<String> lines = FileHandler.readFromFile(USER_FILE);
-        boolean found = false;
-
-        for (int i = 0; i < lines.size(); i++) {
-            String line = lines.get(i);
-            if (line.trim().isEmpty()) continue;
-
-            String[] data = line.split(",");
-
-            if (data.length >= 1 && data[0].equals(userId)) {
-                lines.set(i, updatedUserDetails.toString());
-                found = true;
-                break;
-            }
-        }
-
-        if (found) {
-            FileHandler.overwriteFile(USER_FILE, lines);
-            System.out.println("User profile updated successfully.");
+            insertSubtype(newUser.getUserId(), role);
             return true;
+        } catch (DuplicateKeyException ex) {
+            return false;
         }
+    }
 
-        System.out.println("Update failed: User ID not found.");
-        return false;
+    public User loginUser(String email, String password) {
+        List<User> users = jdbcTemplate.query(
+                "SELECT user_id, name, email, password, role FROM app_user " +
+                        "WHERE LOWER(email) = LOWER(?) AND password = ?",
+                (rs, rowNum) -> new User(
+                        rs.getString("user_id"),
+                        rs.getString("name"),
+                        rs.getString("email"),
+                        rs.getString("password"),
+                        rs.getString("role")
+                ),
+                email,
+                password
+        );
+
+        return users.isEmpty() ? null : users.get(0);
+    }
+
+    public List<User> getUsers() {
+        return jdbcTemplate.query(
+                "SELECT user_id, name, email, password, role FROM app_user ORDER BY name",
+                (rs, rowNum) -> new User(
+                        rs.getString("user_id"),
+                        rs.getString("name"),
+                        rs.getString("email"),
+                        rs.getString("password"),
+                        rs.getString("role")
+                )
+        );
+    }
+
+    @Transactional
+    public boolean updateUserProfile(String userId, User updatedUserDetails) {
+        int rows = jdbcTemplate.update(
+                "UPDATE app_user SET name = ?, email = ?, password = ? WHERE user_id = ?",
+                updatedUserDetails.getName(),
+                updatedUserDetails.getEmail(),
+                updatedUserDetails.getPassword(),
+                userId
+        );
+        return rows > 0;
+    }
+
+    @Transactional
+    public void deleteUser(String userId) {
+        jdbcTemplate.update("DELETE FROM app_user WHERE user_id = ?", userId);
+    }
+
+    private String normalizeRole(String role) {
+        if (role == null || role.isBlank() || role.equalsIgnoreCase("Guest")) {
+            return "Customer";
+        }
+        if (role.equalsIgnoreCase("Admin")) {
+            return "Admin";
+        }
+        if (role.equalsIgnoreCase("Staff")) {
+            return "Staff";
+        }
+        return "Customer";
+    }
+
+    private void insertSubtype(String userId, String role) {
+        switch (role) {
+            case "Admin" -> jdbcTemplate.update("INSERT INTO admin (user_id) VALUES (?)", userId);
+            case "Staff" -> jdbcTemplate.update("INSERT INTO staff (user_id) VALUES (?)", userId);
+            default -> jdbcTemplate.update("INSERT INTO customer (user_id) VALUES (?)", userId);
+        }
     }
 }

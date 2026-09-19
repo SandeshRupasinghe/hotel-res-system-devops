@@ -1,62 +1,67 @@
 <!DOCTYPE html>
 <html xmlns:th="http://www.thymeleaf.org"
       th:replace="layout :: layout(~{::title}, ~{::section})">
-
 <head>
     <title>Booking</title>
 </head>
-
 <section>
-
     <div class="max-w-7xl mx-auto px-6 pt-10 pb-8">
         <h2 class="text-3xl font-bold text-white" style="font-family: 'Georgia', serif;">Booking Management</h2>
         <p class="text-gray-300" style="font-family: 'Georgia', serif;">Create and manage your bookings</p>
     </div>
 
     <div class="max-w-7xl mx-auto px-6 pb-16">
+        <div th:if="${error}"
+             class="bg-red-500 bg-opacity-70 text-white p-3 rounded mb-4"
+             style="font-family: 'Georgia', serif;">
+            <span th:text="${error}"></span>
+        </div>
 
-        <!-- CREATE BOOKING FORM -->
-        <div class="bg-white bg-opacity-10 backdrop-blur-md border border-white border-opacity-20 p-6 rounded-xl shadow-lg mb-10">
+        <div th:if="${canCreateBooking}" class="bg-white bg-opacity-10 backdrop-blur-md border border-white border-opacity-20 p-6 rounded-xl shadow-lg mb-10">
             <h3 class="text-xl font-semibold mb-4 text-white" style="font-family: 'Georgia', serif;">Create Booking</h3>
 
             <form method="post" action="/booking/create" class="grid grid-cols-1 md:grid-cols-2 gap-4">
-
                 <input type="text" name="bookingId" placeholder="Booking ID" required
                        style="font-family: 'Georgia', serif;"
-                       class="p-3 rounded-lg bg-white bg-opacity-10 border border-white border-opacity-20 text-white placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-white focus:ring-opacity-40">
+                       class="p-3 rounded-lg bg-white bg-opacity-10 border border-white border-opacity-20 text-white placeholder-gray-300">
 
-                <input type="hidden" name="userId" th:value="${currentUserId}">
                 <input type="text" th:value="${currentUserId}" disabled
                        style="font-family: 'Georgia', serif;"
                        class="p-3 rounded-lg bg-white bg-opacity-5 border border-white border-opacity-10 text-gray-400 cursor-not-allowed">
 
                 <select name="roomId" required
                         style="font-family: 'Georgia', serif;"
-                        class="p-3 rounded-lg bg-white bg-opacity-10 border border-white border-opacity-20 text-white focus:outline-none focus:ring-2 focus:ring-white focus:ring-opacity-40">
+                        class="p-3 rounded-lg bg-white bg-opacity-10 border border-white border-opacity-20 text-white">
                     <option value="" disabled selected class="bg-gray-800">Select a Room</option>
                     <th:block th:each="room : ${availableRooms}">
                         <option th:value="${room.roomId}" class="bg-gray-800"
-                                th:text="${room.roomId} + ' — ' + ${room.type} + ' ($' + ${room.price} + ')'">
+                                th:text="${room.roomId} + ' - ' + ${room.type} + ' ($' + ${room.price} + ')'">
                         </option>
                     </th:block>
                 </select>
 
-                <input type="date" name="date" required
+                <input type="date" name="checkInDate" required
                        style="font-family: 'Georgia', serif;"
-                       class="p-3 rounded-lg bg-white bg-opacity-10 border border-white border-opacity-20 text-white focus:outline-none focus:ring-2 focus:ring-white focus:ring-opacity-40">
+                       class="p-3 rounded-lg bg-white bg-opacity-10 border border-white border-opacity-20 text-white">
+
+                <input type="date" name="checkOutDate" required
+                       style="font-family: 'Georgia', serif;"
+                       class="p-3 rounded-lg bg-white bg-opacity-10 border border-white border-opacity-20 text-white">
 
                 <button type="submit"
                         style="font-family: 'Georgia', serif;"
                         class="col-span-1 md:col-span-2 bg-blue-600 hover:bg-blue-700 p-3 rounded-lg font-semibold transition">
                     Create Booking
                 </button>
-
             </form>
         </div>
 
-        <!-- VIEW BOOKINGS -->
+        <div th:if="${!canCreateBooking}" class="bg-white bg-opacity-10 border border-white border-opacity-20 p-4 rounded-lg mb-6 text-gray-200" style="font-family: 'Georgia', serif;">
+            This account can view bookings but cannot create customer reservations.
+        </div>
+
         <div class="bg-white bg-opacity-10 backdrop-blur-md border border-white border-opacity-20 p-6 rounded-xl shadow-lg">
-            <h3 class="text-xl font-semibold mb-4 text-white" style="font-family: 'Georgia', serif;">All Bookings</h3>
+            <h3 class="text-xl font-semibold mb-4 text-white" style="font-family: 'Georgia', serif;">Bookings</h3>
 
             <table class="w-full text-left" style="font-family: 'Georgia', serif;">
                 <thead class="bg-white bg-opacity-10">
@@ -64,7 +69,9 @@
                     <th class="p-3">Booking ID</th>
                     <th class="p-3">User ID</th>
                     <th class="p-3">Room ID</th>
-                    <th class="p-3">Date</th>
+                    <th class="p-3">Check In</th>
+                    <th class="p-3">Check Out</th>
+                    <th class="p-3">Status</th>
                     <th class="p-3">Action</th>
                 </tr>
                 </thead>
@@ -74,22 +81,20 @@
                     <td class="p-3" th:text="${booking.bookingId}"></td>
                     <td class="p-3" th:text="${booking.userId}"></td>
                     <td class="p-3" th:text="${booking.roomId}"></td>
-                    <td class="p-3" th:text="${booking.date}"></td>
+                    <td class="p-3" th:text="${booking.checkInDate}"></td>
+                    <td class="p-3" th:text="${booking.checkOutDate}"></td>
+                    <td class="p-3" th:text="${booking.status}"></td>
                     <td class="p-3">
-                        <form method="post" action="/booking/cancel">
+                        <form method="post" action="/booking/cancel" th:if="${booking.status != 'Cancelled'}">
                             <input type="hidden" name="bookingId" th:value="${booking.bookingId}">
                             <button class="bg-red-600 hover:bg-red-700 px-3 py-1 rounded transition"
-                                    style="font-family: 'Georgia', serif;">
-                                Cancel
-                            </button>
+                                    style="font-family: 'Georgia', serif;">Cancel</button>
                         </form>
                     </td>
                 </tr>
                 </tbody>
             </table>
         </div>
-
     </div>
-
 </section>
 </html>

@@ -5,15 +5,21 @@ public class Booking {
     private String bookingId;
     private String userId;
     private String roomId;
-    private String date;
+    private String checkInDate;
+    private String checkOutDate;
     private String status;
+    private String bookingDate;
 
-    public Booking(String bookingId, String userId, String roomId, String date, String status) {
+    public Booking(String bookingId, String userId, String roomId,
+                   String checkInDate, String checkOutDate,
+                   String status, String bookingDate) {
         this.bookingId = bookingId;
         this.userId = userId;
         this.roomId = roomId;
-        this.date = date;
+        this.checkInDate = checkInDate;
+        this.checkOutDate = checkOutDate;
         this.status = status;
+        this.bookingDate = bookingDate;
     }
 
     public Booking() {
@@ -43,12 +49,20 @@ public class Booking {
         this.roomId = roomId;
     }
 
-    public String getDate() {
-        return date;
+    public String getCheckInDate() {
+        return checkInDate;
     }
 
-    public void setDate(String date) {
-        this.date = date;
+    public void setCheckInDate(String checkInDate) {
+        this.checkInDate = checkInDate;
+    }
+
+    public String getCheckOutDate() {
+        return checkOutDate;
+    }
+
+    public void setCheckOutDate(String checkOutDate) {
+        this.checkOutDate = checkOutDate;
     }
 
     public String getStatus() {
@@ -57,5 +71,13 @@ public class Booking {
 
     public void setStatus(String status) {
         this.status = status;
+    }
+
+    public String getBookingDate() {
+        return bookingDate;
+    }
+
+    public void setBookingDate(String bookingDate) {
+        this.bookingDate = bookingDate;
     }
 }

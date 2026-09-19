@@ -1,3 +1,0 @@
-GG,admin,R002,2026-06-19,null
-b001,admin,R001,2026-06-20,null
-B001,testID,R003,2026-06-23,null

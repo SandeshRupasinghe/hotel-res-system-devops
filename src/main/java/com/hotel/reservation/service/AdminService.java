@@ -1,135 +1,50 @@
 package com.hotel.reservation.service;
 
-import com.hotel.reservation.model.User;
-import com.hotel.reservation.model.Room;
 import com.hotel.reservation.model.Booking;
-import com.hotel.reservation.util.FileHandler;
+import com.hotel.reservation.model.Room;
+import com.hotel.reservation.model.User;
+import org.springframework.stereotype.Service;
 
-import java.util.ArrayList;
 import java.util.List;
 
+@Service
 public class AdminService {
 
-    private static final String USERS_FILE = "data/users.txt";
-    private static final String ROOMS_FILE = "data/rooms.txt";
-    private static final String BOOKINGS_FILE = "data/bookings.txt";
+    private final UserService userService;
+    private final RoomService roomService;
+    private final BookingService bookingService;
 
-    //  GET USER
+    public AdminService(UserService userService, RoomService roomService, BookingService bookingService) {
+        this.userService = userService;
+        this.roomService = roomService;
+        this.bookingService = bookingService;
+    }
+
     public List<User> getUsers() {
-        List<User> userList = new ArrayList<>();
-        ArrayList<String> lines = FileHandler.readFromFile(USERS_FILE);
-
-        for (String line : lines) {
-            if (line.trim().isEmpty()) continue;
-
-            String[] data = line.split(",");
-
-            if (data.length >= 5) {
-                userList.add(new User(
-                        data[0], data[1], data[2], data[3], data[4]
-                ));
-            }
-        }
-        return userList;
+        return userService.getUsers();
     }
 
-    //  GET ROOMS
     public List<Room> getRooms() {
-        List<Room> roomList = new ArrayList<>();
-        ArrayList<String> lines = FileHandler.readFromFile(ROOMS_FILE);
-
-        for (String line : lines) {
-            if (line.trim().isEmpty()) continue;
-
-            String[] data = line.split(",");
-
-            if (data.length >= 4) {
-                roomList.add(new Room(
-                        data[0],
-                        data[1],
-                        Double.parseDouble(data[2]),
-                        Boolean.parseBoolean(data[3])
-                ));
-            }
-        }
-        return roomList;
+        return roomService.getRooms();
     }
 
-    //  GET BOOKINGS
     public List<Booking> getBookings() {
-        List<Booking> bookingList = new ArrayList<>();
-        ArrayList<String> lines = FileHandler.readFromFile(BOOKINGS_FILE);
-
-        for (String line : lines) {
-            if (line.trim().isEmpty()) continue;
-
-            String[] data = line.split(",");
-
-            if (data.length >= 5) {
-                bookingList.add(new Booking(
-                        data[0], // bookingId
-                        data[1], // userId
-                        data[2], // roomId
-                        data[3], // date
-                        data[4]  // status
-                ));
-            }
-        }
-        return bookingList;
+        return bookingService.getBookings();
     }
 
-    //  DELETE USER
     public void deleteUser(String userId) {
-        ArrayList<String> allUsers = FileHandler.readFromFile(USERS_FILE);
-        ArrayList<String> updated = new ArrayList<>();
-        //gg
-        for (String line : allUsers) {
-            if (line.trim().isEmpty()) continue;
-
-            String[] data = line.split(",");
-            if (!data[0].equals(userId)) {
-                updated.add(line);
-            }
-        }
-
-        FileHandler.overwriteFile(USERS_FILE, updated);
+        userService.deleteUser(userId);
     }
 
-    //  ADD ROOM
-    public void addRoom(String roomId, String type, double price) {
-        String room = roomId + "," + type + "," + price + ",true";
-        FileHandler.writeToFile(ROOMS_FILE, room);
+    public boolean addRoom(String roomId, String type, double price) {
+        return roomService.addRoom(new Room(roomId, type, price, true, 1, null, 1));
     }
 
-    //  UPDATE ROOM
-    public void updateRoomDetails(String roomId, double price, boolean available) {
-        ArrayList<String> rooms = FileHandler.readFromFile(ROOMS_FILE);
-
-        for (int i = 0; i < rooms.size(); i++) {
-            String[] data = rooms.get(i).split(",");
-
-            if (data[0].equals(roomId)) {
-                rooms.set(i, roomId + "," + data[1] + "," + price + "," + available);
-                break;
-            }
-        }
-
-        FileHandler.overwriteFile(ROOMS_FILE, rooms);
+    public boolean updateRoomDetails(String roomId, double price, boolean available) {
+        return roomService.updateRoomDetails(roomId, price, available);
     }
-    //  DELETE ROOM delete here below if issue
-    public void deleteRoom(String roomId) {
-        ArrayList<String> rooms = FileHandler.readFromFile(ROOMS_FILE);
-        ArrayList<String> updated = new ArrayList<>();
 
-        for (String line : rooms) {
-            if (line.trim().isEmpty()) continue;
-
-            String[] data = line.split(",");
-            if (!data[0].equals(roomId)) {
-                updated.add(line);
-            }
-        }
-
-        FileHandler.overwriteFile(ROOMS_FILE, updated);
+    public boolean deleteRoom(String roomId) {
+        return roomService.deleteRoom(roomId);
     }
 }
