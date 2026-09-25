@@ -1,19 +1,27 @@
 pipeline {
     agent any
 
+    environment {
+        DOCKER_EXE = 'C:\\Program Files\\Docker\\Docker\\resources\\bin\\docker.exe'
+    }
+
     options {
         timestamps()
     }
 
     stages {
+
         stage('Build') {
             steps {
                 echo 'Building Hotel Reservation System...'
+
                 bat 'mvnw.cmd clean package -DskipTests'
             }
+
             post {
                 success {
-                    archiveArtifacts artifacts: 'target/*.jar', fingerprint: true
+                    archiveArtifacts artifacts: 'target/*.jar',
+                                     fingerprint: true
                 }
             }
         }
@@ -21,6 +29,7 @@ pipeline {
         stage('Test') {
             steps {
                 echo 'Running automated tests...'
+
                 bat 'mvnw.cmd test'
             }
         }
@@ -28,8 +37,22 @@ pipeline {
         stage('Code Quality') {
             steps {
                 echo 'Running SonarQube code quality analysis...'
-                withCredentials([string(credentialsId: 'sonarqube-token', variable: 'SONAR_TOKEN')]) {
-                    bat 'mvnw.cmd org.sonarsource.scanner.maven:sonar-maven-plugin:3.11.0.3922:sonar -Dsonar.projectKey=hotel-res-system-devops -Dsonar.projectName="Hotel Reservation System" -Dsonar.host.url=http://localhost:9000 -Dsonar.token=%SONAR_TOKEN% -Dsonar.qualitygate.wait=true -Dsonar.qualitygate.timeout=300'
+
+                withCredentials([
+                    string(
+                        credentialsId: 'sonarqube-token',
+                        variable: 'SONAR_TOKEN'
+                    )
+                ]) {
+                    bat '''
+                    mvnw.cmd org.sonarsource.scanner.maven:sonar-maven-plugin:3.11.0.3922:sonar ^
+                    -Dsonar.projectKey=hotel-res-system-devops ^
+                    -Dsonar.projectName="Hotel Reservation System" ^
+                    -Dsonar.host.url=http://localhost:9000 ^
+                    -Dsonar.token=%SONAR_TOKEN% ^
+                    -Dsonar.qualitygate.wait=true ^
+                    -Dsonar.qualitygate.timeout=300
+                    '''
                 }
             }
         }
@@ -37,14 +60,17 @@ pipeline {
         stage('Security') {
             steps {
                 echo 'Building Docker image for vulnerability scanning...'
-                bat 'docker build -t hotel-res-system:%BUILD_NUMBER% .'
 
-                echo 'Saving Docker image for Trivy analysis...'
-                bat 'docker save hotel-res-system:%BUILD_NUMBER% -o hotel-res-system-ci.tar'
+                bat '"%DOCKER_EXE%" build -t hotel-res-system:%BUILD_NUMBER% .'
 
-                echo 'Scanning Docker image for HIGH and CRITICAL vulnerabilities...'
+                echo 'Saving Docker image for Trivy scanning...'
+
+                bat '"%DOCKER_EXE%" save hotel-res-system:%BUILD_NUMBER% -o hotel-res-system-ci.tar'
+
+                echo 'Scanning for HIGH and CRITICAL vulnerabilities...'
+
                 bat '''
-                docker run --rm ^
+                "%DOCKER_EXE%" run --rm ^
                 -v "%CD%:/work" ^
                 -v trivy-cache:/root/.cache/trivy ^
                 aquasec/trivy:latest image ^
@@ -57,22 +83,29 @@ pipeline {
                 --output /work/trivy-report.txt
                 '''
 
-                echo 'Trivy security report:'
+                echo 'Trivy security scan completed.'
+
                 bat 'type trivy-report.txt'
             }
 
             post {
                 always {
-                    archiveArtifacts artifacts: 'trivy-report.txt', allowEmptyArchive: true
-                    bat 'if exist hotel-res-system-ci.tar del /Q hotel-res-system-ci.tar'
+                    archiveArtifacts artifacts: 'trivy-report.txt',
+                                     allowEmptyArchive: true
+
+                    bat '''
+                    if exist hotel-res-system-ci.tar del /Q hotel-res-system-ci.tar
+                    '''
                 }
             }
         }
     }
 
     post {
+
         always {
-            junit testResults: 'target/surefire-reports/*.xml', allowEmptyResults: true
+            junit testResults: 'target/surefire-reports/*.xml',
+                  allowEmptyResults: true
         }
 
         success {
@@ -80,7 +113,7 @@ pipeline {
         }
 
         failure {
-            echo 'Pipeline failed. Check the Jenkins console output.'
+            echo 'Pipeline failed. Check the failed stage in Jenkins Console Output.'
         }
     }
 }
