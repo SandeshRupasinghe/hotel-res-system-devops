@@ -1,0 +1,11 @@
+groups:
+  - name: hotel-reservation-alerts
+    rules:
+      - alert: HotelApplicationDown
+        expr: up{job="hotel-reservation"} == 0
+        for: 15s
+        labels:
+          severity: critical
+        annotations:
+          summary: "Hotel Reservation application is unavailable"
+          description: "Prometheus cannot reach the Hotel Reservation application."
