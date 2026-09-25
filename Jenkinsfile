@@ -14,7 +14,6 @@ pipeline {
         stage('Build') {
             steps {
                 echo 'Building Hotel Reservation System...'
-
                 bat 'mvnw.cmd clean package -DskipTests'
             }
 
@@ -29,7 +28,6 @@ pipeline {
         stage('Test') {
             steps {
                 echo 'Running automated tests...'
-
                 bat 'mvnw.cmd test'
             }
         }
@@ -84,7 +82,6 @@ pipeline {
                 '''
 
                 echo 'Trivy security scan completed.'
-
                 bat 'type trivy-report.txt'
             }
 
@@ -99,6 +96,30 @@ pipeline {
                 }
             }
         }
+
+        stage('Deployment') {
+            steps {
+                echo 'Deploying secured Hotel Reservation System...'
+
+                bat '''
+                "%DOCKER_EXE%" rm -f hotel-app hotel-mysql 2>NUL || echo No previous containers to remove
+
+                set "HOTEL_IMAGE=hotel-res-system:%BUILD_NUMBER%"
+
+                "%DOCKER_EXE%" compose up -d
+                '''
+
+                echo 'Checking deployed Docker containers...'
+
+                bat '"%DOCKER_EXE%" compose ps'
+
+                echo 'Waiting for the application and performing health check...'
+
+                bat '''
+                powershell -NoProfile -Command "$ok=$false; for($i=1;$i -le 12;$i++){ try { $r=Invoke-WebRequest -UseBasicParsing 'http://localhost:8081/' -TimeoutSec 10; if($r.StatusCode -eq 200){ Write-Host 'Deployment health check passed - HTTP 200'; $ok=$true; break } } catch { Write-Host ('Waiting for application... attempt ' + $i) }; Start-Sleep -Seconds 5 }; if(-not $ok){ Write-Error 'Deployment health check failed'; exit 1 }"
+                '''
+            }
+        }
     }
 
     post {
@@ -109,7 +130,7 @@ pipeline {
         }
 
         success {
-            echo 'Build, Test, Code Quality and Security stages completed successfully.'
+            echo 'Build, Test, Code Quality, Security and Deployment stages completed successfully.'
         }
 
         failure {

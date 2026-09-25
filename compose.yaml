@@ -16,7 +16,7 @@ services:
       retries: 20
 
   hotel-app:
-    image: hotel-res-system:1.0.0
+    image: ${HOTEL_IMAGE:-hotel-res-system:1.0.0}
     container_name: hotel-app
     depends_on:
       mysql:
