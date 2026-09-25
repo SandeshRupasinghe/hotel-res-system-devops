@@ -29,7 +29,7 @@ pipeline {
             steps {
                 echo 'Running SonarQube code quality analysis...'
                 withCredentials([string(credentialsId: 'sonarqube-token', variable: 'SONAR_TOKEN')]) {
-                    bat 'mvnw.cmd sonar:sonar -Dsonar.projectKey=hotel-res-system-devops -Dsonar.projectName="Hotel Reservation System" -Dsonar.host.url=http://localhost:9000 -Dsonar.token=%SONAR_TOKEN% -Dsonar.qualitygate.wait=true -Dsonar.qualitygate.timeout=300'
+                    bat 'mvnw.cmd org.sonarsource.scanner.maven:sonar-maven-plugin:3.11.0.3922:sonar -Dsonar.projectKey=hotel-res-system-devops -Dsonar.projectName="Hotel Reservation System" -Dsonar.host.url=http://localhost:9000 -Dsonar.token=%SONAR_TOKEN% -Dsonar.qualitygate.wait=true -Dsonar.qualitygate.timeout=300'
                 }
             }
         }
