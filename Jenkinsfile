@@ -14,6 +14,7 @@ pipeline {
         stage('Build') {
             steps {
                 echo 'Building Hotel Reservation System...'
+
                 bat 'mvnw.cmd clean package -DskipTests'
             }
 
@@ -28,6 +29,7 @@ pipeline {
         stage('Test') {
             steps {
                 echo 'Running automated tests...'
+
                 bat 'mvnw.cmd test'
             }
         }
@@ -82,6 +84,7 @@ pipeline {
                 '''
 
                 echo 'Trivy security scan completed.'
+
                 bat 'type trivy-report.txt'
             }
 
@@ -129,19 +132,17 @@ pipeline {
                 "%DOCKER_EXE%" tag hotel-res-system:%BUILD_NUMBER% hotel-res-system:release-%BUILD_NUMBER%
                 "%DOCKER_EXE%" tag hotel-res-system:%BUILD_NUMBER% hotel-res-system:latest
 
-                for /f %%i in ('git rev-parse --short HEAD') do set GIT_COMMIT_SHORT=%%i
+                > release-info.txt echo Hotel Reservation System Release
+                >> release-info.txt echo =================================
+                >> release-info.txt echo Release Version: v1.0.%BUILD_NUMBER%
+                >> release-info.txt echo Jenkins Build: %BUILD_NUMBER%
 
-                (
-                    echo Hotel Reservation System Release
-                    echo =================================
-                    echo Release Version: v1.0.%BUILD_NUMBER%
-                    echo Jenkins Build: %BUILD_NUMBER%
-                    echo Git Commit: %GIT_COMMIT_SHORT%
-                    echo Docker Image: hotel-res-system:release-%BUILD_NUMBER%
-                    echo Stable Image: hotel-res-system:latest
-                    echo Release Date: %DATE%
-                    echo Release Time: %TIME%
-                ) > release-info.txt
+                for /f %%i in ('git rev-parse --short HEAD') do >> release-info.txt echo Git Commit: %%i
+
+                >> release-info.txt echo Docker Image: hotel-res-system:release-%BUILD_NUMBER%
+                >> release-info.txt echo Stable Image: hotel-res-system:latest
+                >> release-info.txt echo Release Date: %DATE%
+                >> release-info.txt echo Release Time: %TIME%
 
                 type release-info.txt
                 '''
@@ -181,7 +182,7 @@ pipeline {
                 echo 'Verifying Prometheus is scraping the application...'
 
                 bat '''
-                powershell -NoProfile -Command "$ok=$false; for($i=1;$i -le 12;$i++){ try { $q=Invoke-RestMethod 'http://localhost:9090/api/v1/query?query=up%7Bjob%3D%22hotel-reservation%22%7D'; if($q.data.result.Count -gt 0 -and $q.data.result[0].value[1] -eq '1'){ Write-Host 'PROMETHEUS TARGET STATUS: UP'; $ok=$true; break } } catch {}; Write-Host ('Waiting for Prometheus scrape... attempt ' + $i); Start-Sleep -Seconds 5 }; if(-not $ok){ Write-Error 'Prometheus target is not UP'; exit 1 }"
+                powershell -NoProfile -Command "$ok=$false; for($i=1;$i -le 12;$i++){ try { $r=Invoke-RestMethod 'http://localhost:9090/api/v1/targets'; $t=@($r.data.activeTargets | Where-Object { $_.labels.job -eq 'hotel-reservation' -and $_.health -eq 'up' }); if($t.Count -gt 0){ Write-Host 'PROMETHEUS TARGET STATUS: UP'; $ok=$true; break } } catch {}; Write-Host ('Waiting for Prometheus scrape... attempt ' + $i); Start-Sleep -Seconds 5 }; if(-not $ok){ Write-Error 'Prometheus target is not UP'; exit 1 }"
                 '''
 
                 echo 'Simulating production incident...'
@@ -197,7 +198,7 @@ pipeline {
                 echo 'Verifying Alertmanager received the incident alert...'
 
                 bat '''
-                powershell -NoProfile -Command "$ok=$false; for($i=1;$i -le 12;$i++){ try { $r=Invoke-RestMethod 'http://localhost:9093/api/v2/alerts'; $found=@($r | Where-Object { $_.labels.alertname -eq 'HotelApplicationDown' }).Count -gt 0; if($found){ Write-Host 'ALERTMANAGER RECEIVED HotelApplicationDown'; $ok=$true; break } } catch {}; Write-Host ('Waiting for Alertmanager... attempt ' + $i); Start-Sleep -Seconds 5 }; if(-not $ok){ Write-Error 'Alertmanager did not receive incident alert'; exit 1 }"
+                powershell -NoProfile -Command "$ok=$false; for($i=1;$i -le 12;$i++){ try { $r=Invoke-RestMethod 'http://localhost:9093/api/v2/alerts'; $found=@($r | Where-Object { $_.labels.alertname -eq 'HotelApplicationDown' }).Count -gt 0; if($found){ Write-Host 'ALERTMANAGER RECEIVED HotelApplicationDown'; $ok=$true; break } } catch {}; Write-Host ('Waiting for Alertmanager alert... attempt ' + $i); Start-Sleep -Seconds 5 }; if(-not $ok){ Write-Error 'Alertmanager did not receive incident alert'; exit 1 }"
                 '''
 
                 echo 'Recovering production application...'
@@ -213,24 +214,22 @@ pipeline {
                 echo 'Confirming Prometheus detects recovery...'
 
                 bat '''
-                powershell -NoProfile -Command "$ok=$false; for($i=1;$i -le 12;$i++){ try { $q=Invoke-RestMethod 'http://localhost:9090/api/v1/query?query=up%7Bjob%3D%22hotel-reservation%22%7D'; if($q.data.result.Count -gt 0 -and $q.data.result[0].value[1] -eq '1'){ Write-Host 'PROMETHEUS TARGET RECOVERED: UP'; $ok=$true; break } } catch {}; Write-Host ('Waiting for monitoring recovery... attempt ' + $i); Start-Sleep -Seconds 5 }; if(-not $ok){ Write-Error 'Prometheus did not detect recovery'; exit 1 }"
+                powershell -NoProfile -Command "$ok=$false; for($i=1;$i -le 12;$i++){ try { $r=Invoke-RestMethod 'http://localhost:9090/api/v1/targets'; $t=@($r.data.activeTargets | Where-Object { $_.labels.job -eq 'hotel-reservation' -and $_.health -eq 'up' }); if($t.Count -gt 0){ Write-Host 'PROMETHEUS TARGET RECOVERED: UP'; $ok=$true; break } } catch {}; Write-Host ('Waiting for monitoring recovery... attempt ' + $i); Start-Sleep -Seconds 5 }; if(-not $ok){ Write-Error 'Prometheus did not detect recovery'; exit 1 }"
                 '''
 
                 bat '''
-                (
-                    echo Hotel Reservation System Monitoring Evidence
-                    echo ============================================
-                    echo Live application metrics: VERIFIED
-                    echo Prometheus target monitoring: VERIFIED
-                    echo Incident simulation: COMPLETED
-                    echo HotelApplicationDown alert: FIRED
-                    echo Alertmanager integration: VERIFIED
-                    echo Application recovery: VERIFIED
-                    echo Monitoring recovery: VERIFIED
-                    echo Jenkins Build: %BUILD_NUMBER%
-                    echo Date: %DATE%
-                    echo Time: %TIME%
-                ) > monitoring-evidence.txt
+                > monitoring-evidence.txt echo Hotel Reservation System Monitoring Evidence
+                >> monitoring-evidence.txt echo ============================================
+                >> monitoring-evidence.txt echo Live application metrics: VERIFIED
+                >> monitoring-evidence.txt echo Prometheus target monitoring: VERIFIED
+                >> monitoring-evidence.txt echo Incident simulation: COMPLETED
+                >> monitoring-evidence.txt echo HotelApplicationDown alert: FIRED
+                >> monitoring-evidence.txt echo Alertmanager integration: VERIFIED
+                >> monitoring-evidence.txt echo Application recovery: VERIFIED
+                >> monitoring-evidence.txt echo Monitoring recovery: VERIFIED
+                >> monitoring-evidence.txt echo Jenkins Build: %BUILD_NUMBER%
+                >> monitoring-evidence.txt echo Date: %DATE%
+                >> monitoring-evidence.txt echo Time: %TIME%
 
                 type monitoring-evidence.txt
                 '''
