@@ -33,6 +33,41 @@ pipeline {
                 }
             }
         }
+
+        stage('Security') {
+            steps {
+                echo 'Building Docker image for vulnerability scanning...'
+                bat 'docker build -t hotel-res-system:%BUILD_NUMBER% .'
+
+                echo 'Saving Docker image for Trivy analysis...'
+                bat 'docker save hotel-res-system:%BUILD_NUMBER% -o hotel-res-system-ci.tar'
+
+                echo 'Scanning Docker image for HIGH and CRITICAL vulnerabilities...'
+                bat '''
+                docker run --rm ^
+                -v "%CD%:/work" ^
+                -v trivy-cache:/root/.cache/trivy ^
+                aquasec/trivy:latest image ^
+                --input /work/hotel-res-system-ci.tar ^
+                --scanners vuln ^
+                --severity HIGH,CRITICAL ^
+                --exit-code 1 ^
+                --timeout 15m ^
+                --format table ^
+                --output /work/trivy-report.txt
+                '''
+
+                echo 'Trivy security report:'
+                bat 'type trivy-report.txt'
+            }
+
+            post {
+                always {
+                    archiveArtifacts artifacts: 'trivy-report.txt', allowEmptyArchive: true
+                    bat 'if exist hotel-res-system-ci.tar del /Q hotel-res-system-ci.tar'
+                }
+            }
+        }
     }
 
     post {
@@ -41,7 +76,7 @@ pipeline {
         }
 
         success {
-            echo 'Build, Test and Code Quality stages completed successfully.'
+            echo 'Build, Test, Code Quality and Security stages completed successfully.'
         }
 
         failure {
