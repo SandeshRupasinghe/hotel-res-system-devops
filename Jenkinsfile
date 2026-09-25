@@ -14,6 +14,7 @@ pipeline {
         stage('Build') {
             steps {
                 echo 'Building Hotel Reservation System...'
+
                 bat 'mvnw.cmd clean package -DskipTests'
             }
 
@@ -28,6 +29,7 @@ pipeline {
         stage('Test') {
             steps {
                 echo 'Running automated tests...'
+
                 bat 'mvnw.cmd test'
             }
         }
@@ -82,6 +84,7 @@ pipeline {
                 '''
 
                 echo 'Trivy security scan completed.'
+
                 bat 'type trivy-report.txt'
             }
 
@@ -120,6 +123,42 @@ pipeline {
                 '''
             }
         }
+
+        stage('Release') {
+            steps {
+                echo 'Creating versioned release...'
+
+                bat '''
+                "%DOCKER_EXE%" tag hotel-res-system:%BUILD_NUMBER% hotel-res-system:release-%BUILD_NUMBER%
+                "%DOCKER_EXE%" tag hotel-res-system:%BUILD_NUMBER% hotel-res-system:latest
+
+                for /f %%i in ('git rev-parse --short HEAD') do set GIT_COMMIT_SHORT=%%i
+
+                (
+                    echo Hotel Reservation System Release
+                    echo ================================
+                    echo Release Version: v1.0.%BUILD_NUMBER%
+                    echo Jenkins Build: %BUILD_NUMBER%
+                    echo Git Commit: %GIT_COMMIT_SHORT%
+                    echo Docker Image: hotel-res-system:release-%BUILD_NUMBER%
+                    echo Stable Image: hotel-res-system:latest
+                    echo Release Date: %DATE%
+                    echo Release Time: %TIME%
+                ) > release-info.txt
+
+                type release-info.txt
+                '''
+
+                echo 'Release created successfully.'
+            }
+
+            post {
+                success {
+                    archiveArtifacts artifacts: 'release-info.txt',
+                                     fingerprint: true
+                }
+            }
+        }
     }
 
     post {
@@ -130,7 +169,7 @@ pipeline {
         }
 
         success {
-            echo 'Build, Test, Code Quality, Security and Deployment stages completed successfully.'
+            echo 'Build, Test, Code Quality, Security, Deployment and Release stages completed successfully.'
         }
 
         failure {
